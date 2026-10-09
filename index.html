@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>군웅: 나의 군단</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#171b20;color:#f5dfac;font-family:system-ui,sans-serif;touch-action:none}
+#viewport{position:absolute;left:max(env(safe-area-inset-left),var(--safe-left,0px));right:max(env(safe-area-inset-right),var(--safe-right,0px));top:max(env(safe-area-inset-top),var(--safe-top,0px));bottom:max(env(safe-area-inset-bottom),var(--safe-bottom,0px))}
+#unity-canvas{width:100%;height:100%;display:block;background:#171b20}
+#loading{position:absolute;inset:0;display:grid;place-content:center;text-align:center;background:#171b20;gap:16px;z-index:1}
+progress{width:240px}#error{position:absolute;bottom:20px;left:20px;right:20px;background:#622;padding:12px;display:none;z-index:2}
+</style>
+</head>
+<body>
+<div id="viewport"><canvas id="unity-canvas" tabindex="-1"></canvas><div id="loading"><strong>군웅: 나의 군단</strong><span>군단을 준비하고 있습니다.</span><progress id="progress" max="100" value="0"></progress></div><div id="error" role="alert"></div></div>
+<script type="module">
+import { createSDK } from 'https://h5sdk.onestore.net/lib/v1.1.0/onestore-h5-sdk.min.js';
+const sdk = createSDK();
+const diagnostics = { mode:'initializing', lifecycle:[], savedAt:0, objectName:null, send:null, paused:false, silent:false,
+  record(name,detail){this.lifecycle.push({name,detail,ms:performance.now()});console.info('[GunungH5]',name,detail||'');},
+  emit(method,payload=''){if(this.send)this.send(method,payload);},
+  bind(name,send){this.objectName=name;this.send=send;this.emit('Ringer',String(this.silent));if(this.paused)this.emit('Pause');},
+  saveError(){showError('저장하지 못했습니다. 브라우저 저장 공간을 확인하고 이 화면을 닫지 마세요.');}
+};
+window.gunungWeb=diagnostics;
+function showError(message){const e=document.getElementById('error');e.textContent=message;e.style.display='block';}
+function pause(){diagnostics.paused=true;diagnostics.record('pause');diagnostics.emit('Pause');}
+function resume(ev={}){if(typeof ev.ringerSilent==='boolean'){diagnostics.silent=ev.ringerSilent;diagnostics.emit('Ringer',String(ev.ringerSilent));}diagnostics.paused=document.hidden;diagnostics.record('resume');diagnostics.emit(document.hidden?'Pause':'Resume');}
+sdk.on('pause',pause);sdk.on('resume',resume);sdk.on('exit',()=>{diagnostics.record('exit');diagnostics.emit('Stop');});
+sdk.onBackPressed(()=>false); // ONE Store owns the synchronous exit confirmation.
+document.addEventListener('visibilitychange',()=>document.hidden?pause():resume());
+window.addEventListener('pagehide',()=>diagnostics.emit('Stop'));
+function environment(info){diagnostics.silent=!!info.ringerSilent;document.documentElement.lang=info.locale||'ko';for(const side of ['top','bottom','left','right'])document.documentElement.style.setProperty('--safe-'+side,Math.max(0,Number(info.safeArea?.[side])||0)+'px');}
+try{
+ diagnostics.record('createSDK');
+ const info=await sdk.initializeAsync();
+ diagnostics.record('initializeAsync',info.err||'success');
+ if(info.err){
+  if(info.err!=='Platform Not Supported')throw new Error(info.err);
+  // Public browser play is standalone; no native SDK calls or success claims are fabricated.
+  diagnostics.mode='standalone';
+  console.info('[GunungH5] 일반 브라우저: ONE Store 앱 기능은 사용할 수 없습니다. 광고와 결제는 없습니다.');
+ }else{diagnostics.mode='onestore';environment(info);}
+ const canvas=document.getElementById('unity-canvas');
+ const loader=document.createElement('script');loader.src='Build/webgl-2.loader.js';
+ await new Promise((resolve,reject)=>{loader.onload=resolve;loader.onerror=()=>reject(new Error('Unity loader download failed'));document.body.appendChild(loader);});
+ const manifestResponse=await fetch('Build/data-manifest.json');
+ if(!manifestResponse.ok)throw new Error('Game data manifest download failed');
+ const manifest=await manifestResponse.json();
+ let dataUrl='Build/'+manifest.files[0].name,objectUrl=null;
+ if(manifest.files.length>1){
+  const parts=[];let loaded=0;
+  for(const file of manifest.files){
+   const response=await fetch('Build/'+file.name);
+   if(!response.ok)throw new Error('Game data download failed: '+file.name);
+   const part=await response.arrayBuffer();
+   if(part.byteLength!==file.bytes)throw new Error('Incomplete game data: '+file.name);
+   parts.push(part);loaded+=part.byteLength;
+   const value=Math.round(50*loaded/manifest.bytes);document.getElementById('progress').value=value;
+   if(diagnostics.mode==='onestore')sdk.setLoadingProgress(value);
+  }
+  objectUrl=URL.createObjectURL(new Blob(parts,{type:'application/octet-stream'}));dataUrl=objectUrl;
+ }
+ const unity=await createUnityInstance(canvas,{
+  dataUrl,frameworkUrl:'Build/webgl-2.framework.js.unityweb',codeUrl:'Build/webgl-2.wasm.unityweb',streamingAssetsUrl:'StreamingAssets',companyName:'NeoGenesis',productName:'군웅: 나의 군단',productVersion:'1.0.0',devicePixelRatio:Math.min(window.devicePixelRatio||1,1.5),autoSyncPersistentDataPath:true,
+  showBanner:(message,type)=>{if(type==='error')showError(message);else console.warn(message);}
+ },p=>{const value=Math.round((objectUrl?50:0)+p*(objectUrl?50:100));document.getElementById('progress').value=value;if(diagnostics.mode==='onestore')sdk.setLoadingProgress(value);});
+ if(objectUrl)URL.revokeObjectURL(objectUrl);
+ diagnostics.record('unityLoaded');window.gunungUnity=unity;
+ if(diagnostics.mode==='onestore'){sdk.setLoadingProgress(100);await sdk.startGameAsync();diagnostics.record('startGameAsync');}
+ document.getElementById('loading').remove();diagnostics.readyAt=performance.now();
+}catch(error){diagnostics.record('error',error.reason||error.message);showError('게임을 시작하지 못했습니다. '+(error.message||error.reason));console.error(error);}
+</script>
+</body>
+</html>

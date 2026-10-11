@@ -43,9 +43,9 @@ try{
   console.info('[GunungH5] 일반 브라우저: ONE Store 앱 기능은 사용할 수 없습니다. 광고와 결제는 없습니다.');
  }else{diagnostics.mode='onestore';environment(info);}
  const canvas=document.getElementById('unity-canvas');
- const loader=document.createElement('script');loader.src='Build/webgl-2.loader.js';
+ const loader=document.createElement('script');loader.src='Build/webgl-8.loader.js';
  await new Promise((resolve,reject)=>{loader.onload=resolve;loader.onerror=()=>reject(new Error('Unity loader download failed'));document.body.appendChild(loader);});
- const manifestResponse=await fetch('Build/data-manifest.json');
+ const manifestResponse=await fetch('Build/data-manifest-webgl-8-e77c0b138676cfdaa12c.json');
  if(!manifestResponse.ok)throw new Error('Game data manifest download failed');
  const manifest=await manifestResponse.json();
  let dataUrl='Build/'+manifest.files[0].name,objectUrl=null;
@@ -63,7 +63,7 @@ try{
   objectUrl=URL.createObjectURL(new Blob(parts,{type:'application/octet-stream'}));dataUrl=objectUrl;
  }
  const unity=await createUnityInstance(canvas,{
-  dataUrl,frameworkUrl:'Build/webgl-2.framework.js.unityweb',codeUrl:'Build/webgl-2.wasm.unityweb',streamingAssetsUrl:'StreamingAssets',companyName:'NeoGenesis',productName:'군웅: 나의 군단',productVersion:'1.0.0',devicePixelRatio:Math.min(window.devicePixelRatio||1,1.5),autoSyncPersistentDataPath:true,
+  dataUrl,frameworkUrl:'Build/webgl-8.framework.js.unityweb',codeUrl:'Build/webgl-8.wasm.unityweb',streamingAssetsUrl:'StreamingAssets',companyName:'NeoGenesis',productName:'군웅: 나의 군단',productVersion:'1.0.0',devicePixelRatio:Math.min(window.devicePixelRatio||1,1.5),autoSyncPersistentDataPath:true,
   showBanner:(message,type)=>{if(type==='error')showError(message);else console.warn(message);}
  },p=>{const value=Math.round((objectUrl?50:0)+p*(objectUrl?50:100));document.getElementById('progress').value=value;if(diagnostics.mode==='onestore')sdk.setLoadingProgress(value);});
  if(objectUrl)URL.revokeObjectURL(objectUrl);
